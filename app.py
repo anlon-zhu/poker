@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from streamlit_sortables import sort_items
 
 # Load the poker data
 poker_data_path = 'poker_data.xlsx'
@@ -38,6 +39,7 @@ def reset_game_state():
     st.session_state['looped'] = False
     st.session_state['raise_amt'] = 0.0
     st.session_state['action'] = 'Call'
+    st.session_state['web_state'] = 'beginning'
 
 
 st.session_state['current_round_index'] = st.session_state.get(
@@ -46,15 +48,20 @@ st.session_state['current_player_index'] = st.session_state.get(
     'current_player_index', 0)
 st.session_state['current_bet'] = st.session_state.get(
     'current_bet', 0.0)
-bets = {}
-for i in range(len(poker_data.columns)):
-    bets[i] = 0.0
-st.session_state['bets'] = st.session_state.get('bets', bets)
 st.session_state['folds'] = st.session_state.get('folds', set())
 st.session_state['looped'] = st.session_state.get('looped', False)
 st.session_state['raise_amt'] = st.session_state.get(
     'raise_amt', 0.0)
 st.session_state['action'] = st.session_state.get('action', 'Call')
+# beginning, beginning_sort, play, end
+st.session_state['web_state'] = st.session_state.get(
+    'web_state', 'beginning')
+st.session_state['active_players'] = st.session_state.get(
+    'active_players', poker_data.columns.tolist())
+bets = {}
+for i in range(len(st.session_state['active_players'])):
+    bets[i] = 0.0
+st.session_state['bets'] = st.session_state.get('bets', bets)
 
 
 def next_player():
@@ -67,6 +74,7 @@ def next_player():
     action = st.session_state['action']
     raise_amt = st.session_state['raise_amt']
     current_player_index = st.session_state['current_player_index']
+    players = st.session_state['active_players']
 
     if action == 'Fold':
         folds.add(current_player_index)
@@ -81,7 +89,7 @@ def next_player():
     st.session_state['action'] = 'Call'
     st.session_state['raise_amt'] = 0.0
 
-    num_players = len(poker_data.columns)
+    num_players = len(players)
 
     # Update the current player index
     current_player_index += 1
@@ -108,17 +116,25 @@ def next_player():
                 'current_round_index'] < len(poker_rounds) - 1:
             st.session_state['current_round_index'] += 1
 
+    if st.session_state['current_round_index'] == len(poker_rounds) - 1 or len(st.session_state['folds']) == num_players - 1:
+        st.session_state['web_state'] = 'end'
+
 
 def render_form():
     '''
     Function to render the form
     '''
+    current_round = poker_rounds[st.session_state
+                                 ['current_round_index']]
+    st.subheader(f'{current_round} Round')
+
     current_round_index = st.session_state['current_round_index']
     current_bet = st.session_state['current_bet']
 
     # Highlight the current player and their action
     current_player_index = st.session_state['current_player_index']
-    current_player = poker_data.columns[current_player_index]
+    current_player = st.session_state['active_players'][
+        current_player_index]
 
     action_options = ['Call', 'Raise', 'Fold']
     with st.container():
@@ -141,12 +157,13 @@ def render_form():
 def render_end():
     bets = st.session_state['bets']
     folds = st.session_state['folds']
+    players = st.session_state['active_players']
 
     st.warning(
         'The game is over! Select the winner and start a new game.')
     # Dropdown to select the winner
     remaining_players = [
-        player for i, player in enumerate(poker_data.columns)
+        player for i, player in enumerate(players)
         if i not in folds]
     winner = st.selectbox(
         'Select the Winner', options=remaining_players)
@@ -157,7 +174,7 @@ def render_end():
         # Calculate the new row
         new_row = {
             player: -bets[i]
-            for i, player in enumerate(poker_data.columns)}
+            for i, player in enumerate(players)}
         new_row[winner] += sum(bets.values())
 
         # Append the new row to the DataFrame
@@ -174,64 +191,106 @@ def render_end():
         st.rerun()
 
 
+def render_beginning():
+    st.subheader("Who's Gambling?")
+
+    # Checkbox to select players for the game
+    selected_players = st.multiselect(
+        "", poker_data.columns.tolist(),
+        default=poker_data.columns.tolist())
+
+    # Button to apply the selected players
+    apply_players_button = st.button("Submit")
+
+    if apply_players_button:
+        # Reorder the DataFrame columns based on the selected players
+        st.session_state['active_players'] = selected_players
+        st.session_state['web_state'] = 'beginning_sort'
+        st.rerun()
+
+
+def render_beginning_sort():
+
+    # Render the sortable list of selected players
+    st.subheader("Set the Order")
+    sorted_players = sort_items(
+        st.session_state['active_players'],
+        direction='vertical')
+
+    # Button to apply the selected order
+    apply_order_button = st.button("Apply Order")
+
+    if apply_order_button:
+        st.session_state['active_players'] = sorted_players
+
+        # Success message
+        with st.spinner("Starting the game..."):
+            time.sleep(1)
+        st.session_state['web_state'] = 'play'
+        st.rerun()
+
+
 tab1, tab2 = st.tabs(["Play", "History"])
 
 with tab1:
-    current_round = poker_rounds[st.session_state
-                                 ['current_round_index']]
-    st.subheader(f'{current_round} Round')
-
     # Layout
     left_column, right_column = st.columns(2)
     # Render the form in the left column
     with left_column:
-        if st.session_state['current_round_index'] == len(poker_rounds) - 1:
+        if st.session_state['web_state'] == 'end':
             render_end()
-
-        elif len(st.session_state['folds']) == len(poker_data.columns) - 1:
-            render_end()
-        else:
+        elif st.session_state['web_state'] == 'beginning':
+            render_beginning()
+        elif st.session_state['web_state'] == 'beginning_sort':
+            render_beginning_sort()
+        elif st.session_state['web_state'] == 'play':
             render_form()
 
     # Next Player button in the right column
     with right_column:
-        # Player bets table
-        bets = st.session_state['bets']
-        folds = st.session_state['folds']
+        if 'beginning' in st.session_state['web_state']:
+            with st.container():
+                st.image('poker.png', width=250)
+        else:
+            # Player bets table
+            bets = st.session_state['bets']
+            folds = st.session_state['folds']
 
-        player_stakes = {"Player": [], "Stake": []}
-        for i, player in enumerate(poker_data.columns):
-            stake = bets.get(i, 0.0)
-            if i in folds:
-                player = f'{player} (folded)'
-            player_stakes["Player"].append(player.title())
-            player_stakes["Stake"].append(stake)
-
-        # Convert dictionary to DataFrame
-        df = pd.DataFrame(player_stakes, columns=["Player", "Stake"])
-
-        # Function to apply gray color to folded players and blue color to the current player
-        def color_highlight(s):
-            colors = ['' for _ in range(len(s))]
-            for i in range(len(s)):
+            player_stakes = {"Player": [], "Stake": []}
+            for i, player in enumerate(
+                    st.session_state['active_players']):
+                stake = bets.get(i, 0.0)
                 if i in folds:
-                    # Gray for folded players
-                    colors[i] = 'background-color: rgb(240, 242, 246)'
-                elif i == st.session_state['current_player_index']:
-                    # Blue for current player
-                    colors[i] = 'background-color: rgba(28, 131, 225, 0.1); color: rgb(0, 66, 128)'
-            return colors
+                    player = f'{player} (folded)'
+                player_stakes["Player"].append(player.title())
+                player_stakes["Stake"].append(stake)
 
-        styled_df = df.style.apply(color_highlight)
-        # Format stake column to two decimals
-        styled_df.format({"Stake": "{:.2f}"})
+            # Convert dictionary to DataFrame
+            df = pd.DataFrame(player_stakes, columns=[
+                              "Player", "Stake"])
 
-        st.dataframe(styled_df,
-                     column_config={
-                         "Stake": st.column_config.NumberColumn(
-                             "$", format="%.2f")},
-                     hide_index=True,
-                     use_container_width=True)
+            # Function to apply gray color to folded players and blue color to the current player
+            def color_highlight(s):
+                colors = ['' for _ in range(len(s))]
+                for i in range(len(s)):
+                    if i in folds:
+                        # Gray for folded players
+                        colors[i] = 'background-color: rgb(240, 242, 246)'
+                    elif i == st.session_state['current_player_index']:
+                        # Blue for current player
+                        colors[i] = 'background-color: rgba(28, 131, 225, 0.1); color: rgb(0, 66, 128)'
+                return colors
+
+            styled_df = df.style.apply(color_highlight)
+            # Format stake column to two decimals
+            styled_df.format({"Stake": "{:.2f}"})
+
+            st.dataframe(styled_df,
+                         column_config={
+                             "Stake": st.column_config.NumberColumn(
+                                 "$", format="%.2f")},
+                         hide_index=True,
+                         use_container_width=True)
 
 with tab2:
     # Display the graph
