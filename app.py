@@ -123,13 +123,25 @@ def next_player():
         st.session_state['web_state'] = 'end'
 
 
+def number_of_cards(round_index):
+    if round_index == 0:
+        return 0
+    else:
+        return round_index + 2
+
+
 def render_form():
     '''
     Function to render the form
     '''
     current_round = poker_rounds[st.session_state
                                  ['current_round_index']]
-    st.subheader(f'{current_round} Round')
+    st.subheader(
+        f'{current_round} ' + ''.join(
+            ['🂡'
+             for _ in range(
+                 number_of_cards(
+                     st.session_state['current_round_index']))]))
 
     current_bet = st.session_state['current_bet']
 
@@ -302,7 +314,7 @@ with tab1:
 
             # Convert dictionary to DataFrame
             df = pd.DataFrame(player_stakes, columns=[
-                              "Player", "Stake"])
+                "Player", "Stake"])
 
             # Function to apply gray color to folded players and blue color to the current player
             def color_highlight(s):
