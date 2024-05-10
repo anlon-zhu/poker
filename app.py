@@ -32,7 +32,7 @@ def reset_game_state():
     st.session_state['current_player_index'] = 0
     st.session_state['current_bet'] = 0.0
     bets = {}
-    for i in range(len(poker_data.columns)):
+    for i in range(len(st.session_state['active_players'])):
         bets[i] = 0.0
     st.session_state['bets'] = bets
     st.session_state['folds'] = set()
@@ -80,6 +80,9 @@ def next_player():
         folds.add(current_player_index)
     elif action == 'Raise':
         bets[current_player_index] = raise_amt
+        # Convoluted logic because raise_amt is total amount
+        st.session_state['bet_delta'] = round(
+            raise_amt - st.session_state['current_bet'], 2)
         st.session_state['current_bet'] = bets.get(
             current_player_index, 0.0)
     elif action == 'Call':
@@ -128,7 +131,6 @@ def render_form():
                                  ['current_round_index']]
     st.subheader(f'{current_round} Round')
 
-    current_round_index = st.session_state['current_round_index']
     current_bet = st.session_state['current_bet']
 
     # Highlight the current player and their action
@@ -137,6 +139,7 @@ def render_form():
         current_player_index]
 
     action_options = ['Call', 'Raise', 'Fold']
+
     with st.container():
         st.info(f"Waiting for {current_player}... ",
                 icon=":material/hourglass:")
@@ -150,7 +153,6 @@ def render_form():
             key=f'{current_player}_raise')
         st.session_state['raise_amt'] = round(raise_amt, 2)
     st.session_state['action'] = action
-
     st.button('End Turn', on_click=next_player)
 
 
@@ -194,10 +196,16 @@ def render_end():
 def render_beginning():
     st.subheader("Who's Gambling?")
 
+    # Default players are active players rotated once
+    active_players = st.session_state.get(
+        'active_players', poker_data.columns.tolist())
+    # rotate the players
+    active_players = active_players[1:] + active_players[:1]
+
     # Checkbox to select players for the game
     selected_players = st.multiselect(
         "", poker_data.columns.tolist(),
-        default=poker_data.columns.tolist())
+        default=active_players)
 
     # Button to apply the selected players
     apply_players_button = st.button("Submit")
@@ -213,15 +221,35 @@ def render_beginning_sort():
 
     # Render the sortable list of selected players
     st.subheader("Set the Order")
+    # Centered text for "Dealer" above sorted_players
+    st.write(
+        "<h6 style='text-align: center;margin-bottom: -6rem;'>Dealer</h6>",
+        unsafe_allow_html=True)
+
     sorted_players = sort_items(
         st.session_state['active_players'],
         direction='vertical')
+
+    # Centered text for "Big Blind" below sorted_players
+    st.write(
+        "<h6 style='text-align: center; margin-top: -1rem; margin-bottom: -10rem;'>Big Blind</h6>",
+        unsafe_allow_html=True)
+    big_blind = st.number_input(
+        f'Big Blind $ ({sorted_players[-1].title()})',
+        min_value=0.0, step=0.1)
 
     # Button to apply the selected order
     apply_order_button = st.button("Apply Order")
 
     if apply_order_button:
         st.session_state['active_players'] = sorted_players
+        bets = st.session_state['bets']
+        # Set the blinds
+        bets[len(sorted_players) - 2] = big_blind / 2
+        bets[len(sorted_players) - 1] = big_blind
+
+        # Set the current bet at the blind
+        st.session_state['current_bet'] = big_blind
 
         # Success message
         with st.spinner("Starting the game..."):
@@ -252,6 +280,13 @@ with tab1:
             with st.container():
                 st.image('poker.png', width=250)
         else:
+            # Running bet
+            st.metric(
+                "Current Bet",
+                value=f"${st.session_state['current_bet']}",
+                delta=f"{st.session_state.get('bet_delta', 0.0)}",
+                delta_color="off",
+                help="The minimum $ amount to stay in the game")
             # Player bets table
             bets = st.session_state['bets']
             folds = st.session_state['folds']
