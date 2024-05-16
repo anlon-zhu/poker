@@ -1,0 +1,17 @@
+div.row-widget.stRadio > div {
+    flex-direction: row;
+    align-items: stretch;
+   }
+   
+   div.row-widget.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"]  {
+    background-color: #F0F2F6;
+    padding-right: 10px;
+    padding-left: 4px;
+    padding-bottom: 3px;
+    margin: 4px;
+   }
+
+/* Add hover color changes */
+div.row-widget.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"]:hover {
+    background-color: rgba(255, 75, 75, 0.8);
+}

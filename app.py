@@ -155,8 +155,11 @@ def render_form():
     with st.container():
         st.info(f"Waiting for {current_player}... ",
                 icon=":material/hourglass:")
-        action = st.selectbox(
-            f"Please choose an action:", options=action_options)
+        with open('style.css') as f:
+            st.markdown(f'<style>{f.read()}</style>',
+                        unsafe_allow_html=True)
+        action = st.radio(f"Please choose an action:",
+                          options=action_options, horizontal=True)
 
     if action == 'Raise':
         raise_amt = st.number_input(
